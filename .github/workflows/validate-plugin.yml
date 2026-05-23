@@ -20,11 +20,16 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.check.outputs.version }}
     steps:
       - name: Checkout caller repo
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
 
       - name: Checkout devops-templates (for shared scripts)
         uses: actions/checkout@v4
@@ -32,6 +37,7 @@ jobs:
           repository: hippoo-app/devops-templates
           path: .devops-templates
           ref: main
+          token: ${{ github.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
