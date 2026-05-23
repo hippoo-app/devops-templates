@@ -2,6 +2,8 @@
 
 Reusable GitHub Actions workflows for `hippoo-app` WordPress plugins.
 
+> **Developers cutting a new plugin release:** see [docs/releasing-a-new-version.md](docs/releasing-a-new-version.md).
+
 ## What's here
 
 - `.github/workflows/validate-plugin.yml` — runs on every PR via the caller repo. Verifies the plugin version is consistent across `*.php` header, `readme.txt` `Stable tag:`, the top `== Changelog ==` entry, and any `*_VERSION` PHP `define()`. Also checks the version has not already been published as a WP.org SVN tag.
