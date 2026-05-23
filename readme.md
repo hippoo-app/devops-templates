@@ -3,6 +3,7 @@
 Reusable GitHub Actions workflows for `hippoo-app` WordPress plugins.
 
 > **Developers cutting a new plugin release:** see [docs/releasing-a-new-version.md](docs/releasing-a-new-version.md).
+> **Operator onboarding a new plugin to this pipeline:** see [docs/onboarding-a-new-plugin.md](docs/onboarding-a-new-plugin.md).
 
 ## What's here
 
