@@ -1,0 +1,98 @@
+name: Deploy to WordPress.org
+
+on:
+  workflow_call:
+    inputs:
+      plugin-slug:
+        description: WP.org plugin slug (matches the SVN repo name).
+        required: true
+        type: string
+      plugin-root:
+        description: Path within the repo to the plugin root. Defaults to the repo root.
+        required: false
+        type: string
+        default: "."
+      assets-dir:
+        description: Optional path within the repo containing WP.org assets (banner/icon/screenshots) to push under SVN /assets.
+        required: false
+        type: string
+        default: ".wordpress-org"
+    secrets:
+      SVN_USERNAME:
+        required: true
+      SVN_PASSWORD:
+        required: true
+
+jobs:
+  validate:
+    uses: hippoo-app/devops-templates/.github/workflows/validate-plugin.yml@main
+    with:
+      plugin-slug: ${{ inputs.plugin-slug }}
+      plugin-root: ${{ inputs.plugin-root }}
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    # Required reviewer approval is enforced by the 'production' environment
+    # configured on the caller repo. The workflow pauses here until approved.
+    environment:
+      name: production
+      url: https://wordpress.org/plugins/${{ inputs.plugin-slug }}/
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
+
+      - name: Stage plugin files
+        id: stage
+        env:
+          PLUGIN_ROOT: ${{ inputs.plugin-root }}
+          ASSETS_DIR: ${{ inputs.assets-dir }}
+        run: |
+          set -euo pipefail
+          stage="${RUNNER_TEMP}/plugin-stage"
+          assets_stage="${RUNNER_TEMP}/assets-stage"
+          mkdir -p "$stage"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='node_modules' \
+            --exclude='.devops-templates' \
+            --exclude="${ASSETS_DIR}" \
+            "${PLUGIN_ROOT}/" "$stage/"
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+          if [ -d "${ASSETS_DIR}" ]; then
+            mkdir -p "$assets_stage"
+            rsync -a "${ASSETS_DIR}/" "$assets_stage/"
+            echo "assets=$assets_stage" >> "$GITHUB_OUTPUT"
+          else
+            echo "assets=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to WordPress.org
+        uses: 10up/action-wordpress-plugin-deploy@stable
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          SLUG: ${{ inputs.plugin-slug }}
+          BUILD_DIR: ${{ steps.stage.outputs.stage }}
+          ASSETS_DIR: ${{ steps.stage.outputs.assets }}
+        with:
+          generate-zip: false
+
+      - name: Create matching GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; skipping."
+            exit 0
+          fi
+          gh release create "$tag" \
+            --title "$tag" \
+            --target "${{ github.sha }}" \
+            --notes "Deployed to https://wordpress.org/plugins/${{ inputs.plugin-slug }}/"

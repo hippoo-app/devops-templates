@@ -1,0 +1,46 @@
+name: Validate plugin
+
+on:
+  workflow_call:
+    inputs:
+      plugin-slug:
+        description: WP.org plugin slug (the directory name under plugins.svn.wordpress.org/).
+        required: true
+        type: string
+      plugin-root:
+        description: Path within the repo to the plugin root. Defaults to the repo root.
+        required: false
+        type: string
+        default: "."
+    outputs:
+      version:
+        description: The validated, consistent plugin version.
+        value: ${{ jobs.validate.outputs.version }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
+
+      - name: Checkout devops-templates (for shared scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: hippoo-app/devops-templates
+          path: .devops-templates
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate version consistency and uniqueness
+        id: check
+        env:
+          PLUGIN_ROOT: ${{ inputs.plugin-root }}
+          PLUGIN_SLUG: ${{ inputs.plugin-slug }}
+        run: python3 .devops-templates/scripts/check_version.py
