@@ -76,6 +76,7 @@ jobs:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
           SLUG: ${{ inputs.plugin-slug }}
+          VERSION: ${{ needs.validate.outputs.version }}
           BUILD_DIR: ${{ steps.stage.outputs.stage }}
           ASSETS_DIR: ${{ steps.stage.outputs.assets }}
         with:
