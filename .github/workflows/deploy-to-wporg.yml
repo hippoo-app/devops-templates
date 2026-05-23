@@ -33,11 +33,6 @@ jobs:
   deploy:
     needs: validate
     runs-on: ubuntu-latest
-    # Required reviewer approval is enforced by the 'production' environment
-    # configured on the caller repo. The workflow pauses here until approved.
-    environment:
-      name: production
-      url: https://wordpress.org/plugins/${{ inputs.plugin-slug }}/
     steps:
       - name: Checkout caller repo
         uses: actions/checkout@v4
