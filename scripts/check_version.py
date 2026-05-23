@@ -5,7 +5,8 @@ Checks performed:
   1. Main plugin PHP file header `Version:` matches `readme.txt` `Stable tag:`.
   2. Top entry of the `== Changelog ==` section in `readme.txt` matches the same version.
   3. If a `*_VERSION` define() exists in any PHP file, it matches too.
-  4. The resolved version does not already exist in the plugin's WP.org SVN `tags/` directory.
+  4. No git tag `vX.Y.Z` already exists for the resolved version (git tags are the
+     source of truth for what has been published).
 
 Exits 0 on success, non-zero with a human-readable message on failure.
 Writes `version=X.Y.Z` to $GITHUB_OUTPUT when running in Actions.
@@ -14,9 +15,8 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import sys
-import urllib.request
-import urllib.error
 from pathlib import Path
 
 
@@ -88,45 +88,41 @@ def php_constant_versions(root: Path) -> list[tuple[Path, str, str]]:
     return found
 
 
-def svn_tag_exists(slug: str, version: str) -> bool:
-    url = f"https://plugins.svn.wordpress.org/{slug}/tags/{version}/"
-    req = urllib.request.Request(url, method="HEAD")
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return 200 <= resp.status < 300
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return False
-        print(f"::warning::SVN HEAD for {url} returned HTTP {e.code}; treating as not-existing.", file=sys.stderr)
-        return False
-    except urllib.error.URLError as e:
-        print(f"::warning::Could not reach WP.org SVN ({e}); skipping tags/ check.", file=sys.stderr)
-        return False
+def git_tag_exists(root: Path, tag: str) -> bool:
+    """True iff `tag` exists in the git repo containing `root`.
 
-
-def published_stable_tag(slug: str) -> str | None:
-    """Read Stable tag from the live trunk/readme.txt on WP.org SVN."""
-    url = f"https://plugins.svn.wordpress.org/{slug}/trunk/readme.txt"
+    Fetches tags from origin first so PR runs see tags created by main-branch
+    deploys. Falls back to local-only lookup if the network fetch fails.
+    """
     try:
-        with urllib.request.urlopen(url, timeout=15) as resp:
-            text = resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None  # New plugin, nothing published yet.
-        print(f"::warning::Fetching {url} returned HTTP {e.code}; skipping published-version check.", file=sys.stderr)
-        return None
-    except urllib.error.URLError as e:
-        print(f"::warning::Could not reach WP.org SVN ({e}); skipping published-version check.", file=sys.stderr)
-        return None
-    m = re.search(r"^Stable tag:\s*([0-9][0-9A-Za-z.\-+]*)", text, re.MULTILINE)
-    return m.group(1).strip() if m else None
+        subprocess.run(
+            ["git", "fetch", "--tags", "--quiet", "origin"],
+            cwd=root,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--list", tag],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"::warning::Could not list git tags ({e}); skipping git-tag uniqueness check.", file=sys.stderr)
+        return False
+    return tag in result.stdout.splitlines()
 
 
 def main() -> None:
     root = Path(os.environ.get("PLUGIN_ROOT", ".")).resolve()
-    slug = os.environ.get("PLUGIN_SLUG", "").strip()
-    if not slug:
-        fail("PLUGIN_SLUG env var is required.")
+    slug = os.environ.get("PLUGIN_SLUG", "").strip() or root.name
 
     main_php = find_main_plugin_file(root)
     readme = root / "readme.txt"
@@ -161,23 +157,14 @@ def main() -> None:
 
     version = v_header
 
-    if svn_tag_exists(slug, version):
+    tag = f"v{version}"
+    if git_tag_exists(root, tag):
         fail(
-            f"WP.org SVN already has tags/{version} for '{slug}'. "
+            f"Git tag {tag} already exists — that version has been published. "
             "Bump the version before merging."
         )
-
-    published = published_stable_tag(slug)
-    if published is None:
-        print("Published Stable tag: <none — first release>")
-    else:
-        print(f"Published Stable tag: {published}  (currently live on WP.org)")
-        if published == version:
-            fail(
-                f"Version {version} is already the published Stable tag on WP.org for '{slug}'. "
-                "Bump the version before merging."
-            )
-    print(f"OK: version {version} is consistent and not yet released to WP.org.")
+    print(f"Git tag {tag}: not yet present.")
+    print(f"OK: version {version} is consistent and unreleased.")
 
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
