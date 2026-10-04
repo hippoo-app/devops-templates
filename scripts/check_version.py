@@ -4,7 +4,10 @@
 Checks performed:
   1. Main plugin PHP file header `Version:` matches `readme.txt` `Stable tag:`.
   2. Top entry of the `== Changelog ==` section in `readme.txt` matches the same version.
-  3. If a `*_VERSION` define() exists in any PHP file, it matches too.
+  3. If a `*_VERSION` define() exists in the main plugin file, it matches too.
+     Constants in other PHP files are ignored: plugins can bundle modules with
+     their own independent versions (e.g. `HIPPOO_BI_DB_VERSION` in
+     `app/bi/database.php`), which must not be tied to the plugin version.
   4. No git tag `vX.Y.Z` already exists for the resolved version (git tags are the
      source of truth for what has been published).
 
@@ -69,22 +72,28 @@ def top_changelog_version(readme: Path) -> str:
     fail("Could not parse any version entry inside '== Changelog =='.")
 
 
-def php_constant_versions(root: Path) -> list[tuple[Path, str, str]]:
-    pat = re.compile(
-        r"""define\s*\(\s*['"]([A-Z][A-Z0-9_]*_VERSION)['"]\s*,\s*['"]([0-9][0-9A-Za-z.\-+]*)['"]""",
-    )
+VERSION_CONSTANT_RE = re.compile(
+    r"""define\s*\(\s*['"]([A-Z][A-Z0-9_]*_VERSION)['"]\s*,\s*['"]([0-9][0-9A-Za-z.\-+]*)['"]""",
+)
+
+
+def php_constant_versions(php_file: Path) -> list[tuple[str, str]]:
+    text = php_file.read_text(encoding="utf-8", errors="replace")
+    return [(m.group(1), m.group(2)) for m in VERSION_CONSTANT_RE.finditer(text)]
+
+
+def module_constant_versions(root: Path, main_php: Path) -> list[tuple[Path, str, str]]:
+    """`*_VERSION` constants outside the main plugin file. Informational only."""
     found: list[tuple[Path, str, str]] = []
-    for php in root.rglob("*.php"):
+    for php in sorted(root.rglob("*.php")):
         # Skip vendor / node_modules dumps.
         parts = set(php.parts)
-        if "vendor" in parts or "node_modules" in parts:
+        if "vendor" in parts or "node_modules" in parts or php == main_php:
             continue
         try:
-            text = php.read_text(encoding="utf-8", errors="replace")
+            found.extend((php, name, val) for name, val in php_constant_versions(php))
         except OSError:
             continue
-        for m in pat.finditer(text):
-            found.append((php, m.group(1), m.group(2)))
     return found
 
 
@@ -145,15 +154,16 @@ def main() -> None:
             f"changelog top={v_changelog}. All three must match."
         )
 
-    constants = php_constant_versions(root)
-    if constants:
-        bad = [(p, name, val) for (p, name, val) in constants if val != v_header]
-        for p, name, val in constants:
-            rel = p.relative_to(root)
-            print(f"PHP constant:       {name} in {rel} = {val}")
-        if bad:
-            lines = ", ".join(f"{name} in {p.relative_to(root)} = {val}" for p, name, val in bad)
-            fail(f"PHP version constant(s) do not match {v_header}: {lines}")
+    constants = php_constant_versions(main_php)
+    for name, val in constants:
+        print(f"PHP constant:       {name} in {main_php.name} = {val}")
+    bad = [(name, val) for (name, val) in constants if val != v_header]
+    if bad:
+        lines = ", ".join(f"{name} in {main_php.name} = {val}" for name, val in bad)
+        fail(f"PHP version constant(s) do not match {v_header}: {lines}")
+
+    for p, name, val in module_constant_versions(root, main_php):
+        print(f"Module constant:    {name} in {p.relative_to(root)} = {val}  (not checked)")
 
     version = v_header
 
