@@ -7,7 +7,7 @@ Reusable GitHub Actions workflows for `hippoo-app` WordPress plugins.
 
 ## What's here
 
-- `.github/workflows/validate-plugin.yml` — runs on every PR via the caller repo. Verifies the plugin version is consistent across `*.php` header, `readme.txt` `Stable tag:`, the top `== Changelog ==` entry, and any `*_VERSION` PHP `define()`. Also checks the version has not already been published as a WP.org SVN tag.
+- `.github/workflows/validate-plugin.yml` — runs on every PR via the caller repo. Verifies the plugin version is consistent across `*.php` header, `readme.txt` `Stable tag:`, the top `== Changelog ==` entry, and any `*_VERSION` PHP `define()` in the main plugin file (module constants in other files are ignored). Also checks the version has not already been published as a WP.org SVN tag.
 - `.github/workflows/deploy-to-wporg.yml` — runs on push to `main` in the caller repo. Re-validates, then publishes to `trunk` and `tags/<version>` on `plugins.svn.wordpress.org`. Creates a matching `vX.Y.Z` GitHub release. The PR-approval requirement on `main` is the single human gate.
 - `scripts/check_version.py` — the validator, callable locally too: `PLUGIN_SLUG=hippoo python3 scripts/check_version.py`
 

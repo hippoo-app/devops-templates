@@ -93,13 +93,15 @@ Always **add** the new entry on top; never edit history.
 
 ### 3.4. PHP version constants (if your plugin has any)
 
-If your plugin defines a constant like `MYPLUGIN_VERSION`, `HIPPOO_VERSION`, etc., the validator will look for them too. The convention is **all-uppercase**:
+If your plugin defines a constant like `MYPLUGIN_VERSION`, `HIPPOO_VERSION`, etc. **in the main plugin file**, the validator checks it too. The convention is **all-uppercase**:
 
 ```php
 define( 'HIPPOO_VERSION', '1.2.5' );
 ```
 
 Lowercase variants (`hippshipp_version` etc.) are not checked. If your plugin uses one of those *and* you want it synced, rename it to uppercase first.
+
+`*_VERSION` constants in any other PHP file (e.g. `HIPPOO_BI_DB_VERSION` in `app/bi/database.php`) are treated as independently versioned modules: the validator lists them in its output but does not require them to match the plugin version.
 
 ### 3.5. Sanity-check locally (optional)
 
@@ -151,7 +153,7 @@ This bumps 1.2.4 → 1.2.5.
 
 GitHub Actions runs **`validate / validate`** on every PR. It checks that:
 
-- The version is consistent across `<plugin>.php` header, `readme.txt` Stable tag, the top `== Changelog ==` entry, and any uppercase `*_VERSION` PHP constants.
+- The version is consistent across `<plugin>.php` header, `readme.txt` Stable tag, the top `== Changelog ==` entry, and any uppercase `*_VERSION` PHP constant in the main plugin file.
 - No git tag `vX.Y.Z` exists yet for the proposed version.
 
 If it fails, the error in the Actions log will name the exact file and value. Fix locally, commit, push — the check re-runs.
@@ -224,7 +226,7 @@ git checkout -b release/X.Y.Z
 #    <plugin>.php           — Version: X.Y.Z (in /** */ header)
 #    readme.txt             — Stable tag: X.Y.Z
 #    readme.txt             — top entry of == Changelog == is X.Y.Z
-#    any *_VERSION constant — '<X.Y.Z>'
+#    *_VERSION constant in <plugin>.php — '<X.Y.Z>'
 
 # 3. (optional) local check
 PLUGIN_SLUG=<slug> python3 /path/to/devops-templates/scripts/check_version.py
